@@ -1,0 +1,93 @@
+---
+title: "Practical Machine Learning Assignment 1"
+date: September 20, 2014
+output: html_document
+---
+
+This document/report is prepared as part of the assignment for the Practical Machine Learning course. 
+
+We begin with loading of the necessary libraries as used during the course of the exercise.
+
+```{r}
+#turn off warniings
+options(warn=-1)
+
+library(Hmisc)
+library(caret)
+library(randomForest)
+library(foreach)
+library(doParallel)
+
+#set seed value
+set.seed(6666)
+
+```
+
+####Loading the dataset and cleaning
+
+We now load the dataset. Point to note here is that simply using 'read.csv' command loads the dataset with some numerical fields auto-loaded as factor variables. To avoid the same, we specify apropriate literal with na.string as depicted below.
+
+```{r}
+data.train <- read.csv("pml-training.csv", na.strings=c("#DIV/0!") )
+data.test <- read.csv("pml-testing.csv", na.strings=c("#DIV/0!") )
+
+```
+
+Additionally, we cast columns 8 onwards to be numeric data type
+
+```{r}
+for(dummy in c(8:ncol(data.train)-1)) {data.train[,dummy] = as.numeric(as.character(data.train[,dummy]))}
+
+for(dummy in c(8:ncol(data.test)-1)) {data.test[,dummy] = as.numeric(as.character(data.test[,dummy]))}
+
+
+```
+
+####creation of data model
+
+Next, we get rid of the redundant columns which aren't relevant for the data model; namely columns like timestamps, new_window, num_window etc.
+
+```{r}
+features <- colnames(data.train[colSums(is.na(data.train)) == 0])[-(1:7)]
+data.model <- data.train[features]
+
+```
+
+We then partition the data in ratio of 0.75/0.25 into training and evaluation sets.
+
+```{r}
+x <- createDataPartition(y=data.model$classe, p=0.75, list=FALSE )
+training <- data.model[x,]
+testing <- data.model[-x,]
+
+```
+
+####Algorithm application -- Random Forests
+
+We next apply RamdonForest algorithm. To speed up time, we use the registerDoParallel function for parallel processing.
+
+```{r}
+
+registerDoParallel()
+x1 <- training[-ncol(training)]
+x2 <- training$classe
+
+model.rf <- foreach(ntree=rep(150, 6), .combine=randomForest::combine, .packages='randomForest') %dopar% {
+  randomForest(x1, x2, ntree=ntree) 
+}
+
+```
+
+We evaluate the model by making predictions on the test data and using confusion matrices to evaluate parameters like sensitivity and specificity
+
+```{r}
+
+predictions.trainData <- predict(model.rf, newdata=training)
+confusionMatrix(predictions.trainData,training$classe)
+
+
+predictions.testData <- predict(model.rf, newdata=testing)
+confusionMatrix(predictions.testData,testing$classe)
+
+```
+
